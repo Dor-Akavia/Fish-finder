@@ -1,0 +1,69 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache
+.ruff_cache
+venv/
+env/
+ENV/
+.venv/
+build/
+dist/
+*.egg-info/
+
+debug/
+database/
+
+# --- Environment Variables ---
+.env
+*.env
+!.env.example
+
+# --- SSH Keys ---
+*.pem
+
+# --- Terraform ---
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# --- AWS / Lambda ---
+*.zip
+
+# --- Build Artifacts ---
+*.tar.gz
+
+# --- ML Model Weights (too large for git) ---
+fish-finder-worker/models/*.pth
+
+# --- Training Dataset (too large for git) ---
+fish-finder-worker/dataset/
+
+# --- Node.js ---
+node_modules/
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# --- Logs ---
+*.log
+
+# --- Claude Code ---
+.claude/

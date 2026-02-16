@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <!-- Mobile-first: ensures the page renders at device width, not zoomed out -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fish Finder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header>
+    <h1>Fish Finder</h1>
+    <p class="subtitle">העלה תמונת דג לזיהוי מין ובדיקת תקנות דיג</p>
+    <!-- Logged-in user info + logout (hidden until authenticated) -->
+    <div id="user-bar" class="user-bar" hidden>
+      <span id="user-email"></span>
+      <button id="logout-btn" class="btn-logout">התנתק</button>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         AUTH SECTION
+         ══════════════════════════════════════════════════════════════
+         This section handles Cognito sign-in, sign-up, and email
+         verification. It is shown BEFORE the user can access the
+         upload functionality.
+
+         How it works:
+           1. User visits the page -> sees Sign In form
+           2. New users click "הרשם" to switch to Sign Up form
+           3. After Sign Up, Cognito sends a 6-digit code to their email
+           4. User enters the code in the Verify form
+           5. Once verified, they can Sign In
+           6. After Sign In, Cognito returns JWT tokens that are
+              attached to every API call as: Authorization: Bearer <token>
+    -->
+    <section class="card" id="auth-section">
+      <h2 id="auth-title">התחברות</h2>
+
+      <!-- ── Sign In Form ── -->
+      <form id="signin-form" autocomplete="on">
+        <div class="form-group">
+          <label for="signin-email">אימייל</label>
+          <input type="email" id="signin-email" placeholder="your@email.com"
+                 required autocomplete="email" dir="ltr">
+        </div>
+        <div class="form-group">
+          <label for="signin-password">סיסמה</label>
+          <input type="password" id="signin-password" placeholder="סיסמה"
+                 required autocomplete="current-password" dir="ltr">
+        </div>
+        <button type="submit" class="btn-primary" id="signin-btn">התחבר</button>
+        <p class="auth-switch">
+          אין לך חשבון?
+          <a href="#" id="show-signup">הרשם</a>
+        </p>
+      </form>
+
+      <!-- ── Sign Up Form (hidden by default) ── -->
+      <form id="signup-form" hidden autocomplete="on">
+        <div class="form-group">
+          <label for="signup-email">אימייל</label>
+          <input type="email" id="signup-email" placeholder="your@email.com"
+                 required autocomplete="email" dir="ltr">
+        </div>
+        <div class="form-group">
+          <label for="signup-password">סיסמה</label>
+          <input type="password" id="signup-password" placeholder="מינימום 8 תווים, אות גדולה, מספר"
+                 required autocomplete="new-password" dir="ltr" minlength="8">
+        </div>
+        <button type="submit" class="btn-primary" id="signup-btn">הרשם</button>
+        <p class="auth-switch">
+          כבר יש לך חשבון?
+          <a href="#" id="show-signin">התחבר</a>
+        </p>
+      </form>
+
+      <!-- ── Email Verification Form (shown after Sign Up) ── -->
+      <!--
+        After a user signs up, Cognito sends a 6-digit code to their email.
+        The user must enter this code to confirm their account.
+        This is a one-time process — once confirmed, the account is permanent.
+      -->
+      <form id="verify-form" hidden>
+        <p class="verify-info">
+          שלחנו קוד אימות לאימייל שלך. הזן אותו כאן:
+        </p>
+        <div class="form-group">
+          <label for="verify-code">קוד אימות</label>
+          <input type="text" id="verify-code" placeholder="123456"
+                 required maxlength="6" pattern="[0-9]{6}" dir="ltr"
+                 inputmode="numeric" autocomplete="one-time-code">
+        </div>
+        <button type="submit" class="btn-primary" id="verify-btn">אמת חשבון</button>
+      </form>
+
+      <!-- Auth error/status messages -->
+      <p id="auth-error" class="auth-error" hidden></p>
+      <div id="auth-spinner" class="spinner" hidden></div>
+    </section>
+
+    <!-- ── Upload Section (hidden until authenticated) ── -->
+    <section class="card" id="upload-section" hidden>
+      <h2>העלה תמונה</h2>
+
+      <div class="drop-zone" id="drop-zone" role="button" tabindex="0"
+           aria-label="לחץ או גרור תמונת דג לכאן">
+        <span class="drop-icon">📷</span>
+        <p>לחץ לבחירת תמונה או גרור לכאן</p>
+        <p class="hint">תומך ב-JPG, PNG, HEIC</p>
+        <input type="file" id="file-input" accept="image/*" hidden>
+      </div>
+
+      <div id="preview-container" hidden>
+        <img id="preview-img" alt="תצוגה מקדימה" />
+        <p id="preview-name" class="file-name"></p>
+        <button id="upload-btn" class="btn-primary">זהה דג</button>
+        <button id="cancel-btn" class="btn-secondary">בטל</button>
+      </div>
+    </section>
+
+    <!-- ── Status / Progress ── -->
+    <section class="card" id="status-section" hidden>
+      <div class="spinner"></div>
+      <p id="status-text">מעלה תמונה...</p>
+    </section>
+
+    <!-- ── Results ── -->
+    <section class="card" id="results-section" hidden>
+      <h2>תוצאת זיהוי</h2>
+
+      <div class="result-header">
+        <span class="result-emoji">🐟</span>
+        <div>
+          <h3 id="result-hebrew" class="result-name"></h3>
+          <p  id="result-species" class="result-species"></p>
+        </div>
+      </div>
+
+      <div class="result-grid">
+        <div class="result-item">
+          <span class="label">מקוריות</span>
+          <span id="result-native" class="value"></span>
+        </div>
+        <div class="result-item">
+          <span class="label">מצב אוכלוסייה</span>
+          <span id="result-population" class="value"></span>
+        </div>
+        <div class="result-item">
+          <span class="label">גודל ממוצע</span>
+          <span id="result-avg-size" class="value"></span>
+        </div>
+        <div class="result-item">
+          <span class="label">גודל מינימלי לדיג</span>
+          <span id="result-min-size" class="value"></span>
+        </div>
+        <div class="result-item">
+          <span class="label">איסור עונתי</span>
+          <span id="result-ban" class="value"></span>
+        </div>
+      </div>
+
+      <div class="result-notes" id="result-notes-container">
+        <span class="label">הערות רגולציה</span>
+        <p id="result-notes"></p>
+      </div>
+
+      <div class="result-description">
+        <span class="label">תיאור</span>
+        <p id="result-description"></p>
+      </div>
+
+      <button id="new-upload-btn" class="btn-primary" style="margin-top: 1.5rem;">
+        זהה דג נוסף
+      </button>
+    </section>
+
+    <!-- ── Error ── -->
+    <section class="card" id="error-section" hidden>
+      <p class="error-icon">⚠️</p>
+      <p id="error-text">אירעה שגיאה. נסה שוב.</p>
+      <button id="retry-btn" class="btn-secondary">נסה שוב</button>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>Fish Finder · זיהוי דגי ים התיכון הישראלי</p>
+  </footer>
+
+  <!--
+    amazon-cognito-identity-js is the official AWS SDK for Cognito auth in the browser.
+    It implements the Secure Remote Password (SRP) protocol which means the password
+    is NEVER sent to the server in plain text — only a mathematical proof of knowledge.
+
+    Loaded from CDN so we don't need a build step (webpack/vite).
+    The library exposes a global object: AmazonCognitoIdentity
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

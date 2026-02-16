@@ -1,0 +1,91 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent deployments
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI Checks
+    uses: ./.github/workflows/ci.yml
+
+  deploy-webapp:
+    name: Deploy Webapp to EC2
+    runs-on: ubuntu-latest
+    needs: ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package webapp
+        run: bash package_webapp.sh
+
+      - name: Copy files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.WEBAPP_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          source: "fish_webapp.tar.gz,webapp/setup_webapp.sh"
+          target: "~/"
+
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.WEBAPP_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            bash ~/webapp/setup_webapp.sh \
+              "${{ secrets.FF_COGNITO_POOL_ID }}" \
+              "${{ secrets.FF_COGNITO_CLIENT_ID }}" \
+              "${{ secrets.FF_S3_BUCKET }}" \
+              "${{ secrets.AWS_REGION }}"
+            sudo systemctl restart fish-finder-webapp
+            sleep 3
+            sudo systemctl is-active fish-finder-webapp
+
+  deploy-lambda:
+    name: Build & Push Lambda Image
+    runs-on: ubuntu-latest
+    needs: ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push Docker image
+        working-directory: fish-finder-worker
+        env:
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_URL }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t fish-finder-ml-worker -f lambda/Dockerfile .
+          docker tag fish-finder-ml-worker:latest $ECR_REPOSITORY:latest
+          docker tag fish-finder-ml-worker:latest $ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REPOSITORY:latest
+          docker push $ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Update Lambda function
+        env:
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_URL }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws lambda update-function-code \
+            --function-name fish-finder-ml-worker \
+            --image-uri $ECR_REPOSITORY:$IMAGE_TAG \
+            --no-cli-pager

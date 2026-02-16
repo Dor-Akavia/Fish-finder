@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    name: Lint & Test (Python)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -r webapp/requirements.txt
+
+      - name: Lint with ruff
+        run: ruff check webapp/ fish-finder-worker/scripts/
+
+      - name: Run tests
+        run: pytest -v
+
+  terraform-validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Check formatting
+        working-directory: infrastracture
+        run: terraform fmt -check -recursive
+
+      - name: Initialize (no backend)
+        working-directory: infrastracture
+        run: terraform init -backend=false
+
+      - name: Validate configuration
+        working-directory: infrastracture
+        run: terraform validate

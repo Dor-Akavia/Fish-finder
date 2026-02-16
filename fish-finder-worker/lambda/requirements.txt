@@ -1,0 +1,6 @@
+# Lambda dependencies - installed in Dockerfile via pip
+# Listed here for reference and local testing
+torch
+torchvision
+boto3
+Pillow
